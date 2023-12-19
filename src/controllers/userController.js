@@ -5,11 +5,14 @@ const bcrypt = require("bcrypt")
 const HTTP_STATUS_CODES = require("../utils/statusCodes")
 const Note = require("../model/Note")
 const { id } = require("date-fns/locale")
+
+
 // Create a user
 const createUser = asyncWrapper(async(req, res)=>{
     const { username, password, roles} = req.body
 
     // validating data, check if the required fields are being send from the frontend
+    // !Array.isArray(roles),, this checks if roles is not an array
     if(!username || !password, !Array.isArray(roles), !roles.length){
         return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({msg:"All fields are required!"})
     }
@@ -21,7 +24,7 @@ const createUser = asyncWrapper(async(req, res)=>{
     }
 
     // Hash the password
-    const salt = await bcrypt.genSalt(10)
+    const salt = await bcrypt.genSalt(10) //salt rounds
     const hashedPassword = await bcrypt.hash(password, salt)
 
     // const newUer = {
@@ -51,7 +54,10 @@ const createUser = asyncWrapper(async(req, res)=>{
 const getUsers = asyncWrapper(async(req, res)=>{
     // Get all users from the database
     // lean will make sure we get only the json 
-    const users = await User.find({}).sort({ createdAt: -1 });
+    // select('-password'), this means I do not to want to get the users password
+    const users = await User.find({}).sort({ createdAt: -1 }).select('-password').lean();
+
+    // check if we have users 
     if(!users){
         return res.status(HTTP_STATUS_CODES.NO_CONTENT).json({})
     }
@@ -79,7 +85,7 @@ const updateUser = asyncWrapper(async (req, res) => {
         }
 
         // check for duplicates
-        const dupUser = await User.findOne({ username }).lean();
+        const dupUser = await User.findOne({ username }).lean().exec();
 
         // Allow updates to the original user
         if (dupUser && dupUser._id.toString() !== userId) {
@@ -92,7 +98,7 @@ const updateUser = asyncWrapper(async (req, res) => {
         user.active = active;
 
         if (password) {
-            const salt = await bcrypt.genSalt(10);
+            const salt = await bcrypt.genSalt(10); //salt rounds
             const hashedPassword = await bcrypt.hash(password, salt);
             user.password = hashedPassword;
         }
@@ -108,11 +114,15 @@ const updateUser = asyncWrapper(async (req, res) => {
 });
 
 const deleteUser = asyncWrapper(async(req,res)=>{
-    const userId = req.params.id
-    const delUser = await User.findByIdAndRemove({userId})
-    if(!delUser){
-        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json('Invalid request')
+    const userId = req.body
+    if(!userId){
+        return res.status(HTTP_STATUS_CODES.NOT_FOUND).json('UserID request')
     }
+
+    // const delUser = await User.findByIdAndRemove({userId})
+    // if(!delUser){
+    //     return res.status(HTTP_STATUS_CODES.NOT_FOUND).json('Invalid request')
+    // }
     res.status(HTTP_STATUS_CODES.NO_CONTENT).json()
 
     // We do not want to delete a user if assigned to the notes
@@ -121,6 +131,7 @@ const deleteUser = asyncWrapper(async(req,res)=>{
         return res.status(HTTP_STATUS_CODES.BAD_REQUEST).json({msg: "User has assigned notes"}) 
     }
 
+    // Define our user
     const user = await User.findById(userId)
     if(!user){
         return res.status(HTTP_STATUS_CODES.NOT_FOUND).json({msg: 'User does not exist'})
